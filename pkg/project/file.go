@@ -14,6 +14,13 @@ type (
 	MainFile struct {
 		Repositories map[string]RepositoryDescriptor `yaml:"repositories"`
 		ProjectName  string                          `yaml:"project_name"`
+		Server       ServerDescriptor                `yaml:"server"`
+	}
+
+	ServerDescriptor struct {
+		Hostname string `yaml:"hostname"`
+		Port     int    `yaml:"port"`
+		Insecure bool   `yaml:"insecure"`
 	}
 
 	RepositoryDescriptor struct {
@@ -52,11 +59,24 @@ func LoadCurrent() (Project, error) {
 	}
 
 	pr := Project{
-		Name: filepath.Base(wd),
+		Name:      filepath.Base(wd),
+		ServerURL: "http://localhost:8080",
 	}
 
 	if len(strings.TrimSpace(mainFile.ProjectName)) > 0 {
 		pr.Name = mainFile.ProjectName
+	}
+
+	if len(strings.TrimSpace(mainFile.Server.Hostname)) > 0 {
+		method := "https"
+		port := 8080
+		if mainFile.Server.Insecure {
+			method = "http"
+		}
+		if mainFile.Server.Port > 0 {
+			port = mainFile.Server.Port
+		}
+		pr.ServerURL = fmt.Sprintf("%s://%s:%d", method, mainFile.Server.Hostname, port)
 	}
 
 	for repoName, repo := range mainFile.Repositories {

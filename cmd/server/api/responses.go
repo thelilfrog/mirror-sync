@@ -2,13 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"mirror-sync/pkg/remote/obj"
 	"net/http"
 	"time"
 )
 
-func internalServerError(w http.ResponseWriter, r *http.Request) {
+func internalServerError(err any, w http.ResponseWriter, r *http.Request) {
 	payload := obj.HTTPError{
 		HTTPCore: obj.HTTPCore{
 			Status:    http.StatusInternalServerError,
@@ -16,7 +17,7 @@ func internalServerError(w http.ResponseWriter, r *http.Request) {
 			Timestamp: time.Now(),
 		},
 		Error:   "Internal Server Error",
-		Message: "The server encountered an unexpected condition that prevented it from fulfilling the request.",
+		Message: fmt.Sprintf("%v", err),
 	}
 
 	w.Header().Add("Content-Type", "application/json")

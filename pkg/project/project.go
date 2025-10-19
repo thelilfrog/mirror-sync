@@ -4,6 +4,7 @@ type (
 	Project struct {
 		Name         string       `json:"name"`
 		Repositories []Repository `json:"repositories"`
+		ServerURL    string       `json:"-"`
 	}
 
 	Repository struct {

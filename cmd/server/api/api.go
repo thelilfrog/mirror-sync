@@ -1,8 +1,12 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
+	"log/slog"
+	"mirror-sync/cmd/server/core/storage"
 	"mirror-sync/pkg/constants"
+	"mirror-sync/pkg/project"
 	"mirror-sync/pkg/remote/obj"
 	"net/http"
 	"runtime"
@@ -14,11 +18,14 @@ import (
 type (
 	HTTPServer struct {
 		Server *http.Server
+		data   *storage.Repository
 	}
 )
 
-func NewServer(port int) *HTTPServer {
-	s := &HTTPServer{}
+func NewServer(data *storage.Repository, port int) *HTTPServer {
+	s := &HTTPServer{
+		data: data,
+	}
 	router := chi.NewRouter()
 	router.NotFound(func(writer http.ResponseWriter, request *http.Request) {
 		notFound("id not found", writer, request)
@@ -35,8 +42,10 @@ func NewServer(port int) *HTTPServer {
 		routerAPI.Route("/v1", func(r chi.Router) {
 			// Get information about the server
 			r.Get("/version", s.Information)
-			r.Route("/sync", func(r chi.Router) {
-				
+			r.Route("/projects", func(r chi.Router) {
+				r.Get("/{name}", func(w http.ResponseWriter, r *http.Request) {})
+				r.Post("/{name}", s.ProjectPostHandler)
+				r.Delete("/{name}", func(w http.ResponseWriter, r *http.Request) {})
 			})
 		})
 	})
@@ -56,4 +65,29 @@ func (s *HTTPServer) Information(w http.ResponseWriter, r *http.Request) {
 		OSArchitecture: runtime.GOARCH,
 	}
 	ok(info, w, r)
+}
+
+func (s *HTTPServer) ProjectPostHandler(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+
+	if len(name) == 0 {
+		badRequest("project name cannot be empty", w, r)
+		return
+	}
+
+	var pr project.Project
+	d := json.NewDecoder(r.Body)
+	if err := d.Decode(&pr); err != nil {
+		slog.Error("failed to parse project description", "err", err)
+		internalServerError(err, w, r)
+		return
+	}
+
+	if err := s.data.Save(pr); err != nil {
+		slog.Error("failed to save project to the database", "err", err)
+		internalServerError(err, w, r)
+		return
+	}
+
+	w.WriteHeader(201)
 }

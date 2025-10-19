@@ -1,0 +1,18 @@
+-- +goose Up
+CREATE TABLE Projects (
+	id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL
+);
+
+CREATE TABLE Repositories (
+	id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL,
+	schedule TEXT NOT NULL,
+	"source" TEXT NOT NULL,
+	destination TEXT NOT NULL,
+    project INTEGER NOT NULL
+);
+
+
+-- +goose Down
+DROP TABLE Projects;

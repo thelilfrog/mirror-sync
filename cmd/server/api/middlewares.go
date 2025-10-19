@@ -7,7 +7,7 @@ func recoverMiddleware(next http.Handler) http.Handler {
 		defer func() {
 			err := recover()
 			if err != nil {
-				internalServerError(w, r)
+				internalServerError(err, w, r)
 			}
 		}()
 		next.ServeHTTP(w, r)

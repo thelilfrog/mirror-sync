@@ -19,7 +19,7 @@ type (
 func (*VersionCmd) Name() string     { return "version" }
 func (*VersionCmd) Synopsis() string { return "show version and system information" }
 func (*VersionCmd) Usage() string {
-	return `Usage: cloudsave version
+	return `Usage: mirror-sync version
 
 Print the version of the software
 
@@ -36,7 +36,7 @@ func (p *VersionCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{
 }
 
 func local() {
-	fmt.Println("Client: git-sync cli")
+	fmt.Println("Client: mirror-sync cli")
 	fmt.Println(" Version:       " + constants.Version)
 	fmt.Println(" API version:   " + strconv.Itoa(constants.ApiVersion))
 	fmt.Println(" Go version:    " + runtime.Version())
