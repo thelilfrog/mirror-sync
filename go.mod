@@ -5,6 +5,8 @@ go 1.25
 require (
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-git/go-git/v6 v6.0.0-20250929195514-145daf2492dd
+	github.com/goccy/go-yaml v1.18.0
+	github.com/google/subcommands v1.2.0
 )
 
 require (
