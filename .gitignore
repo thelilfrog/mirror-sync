@@ -1,1 +1,5 @@
 /tmp
+/env
+/cli
+/server
+/data.db
