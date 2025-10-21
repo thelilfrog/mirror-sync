@@ -8,6 +8,7 @@ require (
 	github.com/go-git/go-git/v6 v6.0.0-20250929195514-145daf2492dd
 	github.com/goccy/go-yaml v1.18.0
 	github.com/google/subcommands v1.2.0
+	github.com/google/uuid v1.6.0
 	github.com/pressly/goose/v3 v3.26.0
 )
 
@@ -21,7 +22,6 @@ require (
 	github.com/go-git/gcfg/v2 v2.0.2 // indirect
 	github.com/go-git/go-billy/v6 v6.0.0-20250627091229-31e2a16eef30 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/kevinburke/ssh_config v1.4.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

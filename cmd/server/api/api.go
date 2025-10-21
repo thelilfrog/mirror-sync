@@ -43,6 +43,7 @@ func NewServer(data *storage.Repository, port int) *HTTPServer {
 			// Get information about the server
 			r.Get("/version", s.Information)
 			r.Route("/projects", func(r chi.Router) {
+				r.Get("/all", s.ProjectsHandler)
 				r.Get("/{name}", func(w http.ResponseWriter, r *http.Request) {})
 				r.Post("/{name}", s.ProjectPostHandler)
 				r.Delete("/{name}", func(w http.ResponseWriter, r *http.Request) {})
@@ -90,4 +91,15 @@ func (s *HTTPServer) ProjectPostHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.WriteHeader(201)
+}
+
+func (s *HTTPServer) ProjectsHandler(w http.ResponseWriter, r *http.Request) {
+	prs, err := s.data.List()
+	if err != nil {
+		slog.Error("failed to fetch all the projects from the database", "err", err)
+		internalServerError(err, w, r)
+		return
+	}
+
+	ok(prs, w, r)
 }
