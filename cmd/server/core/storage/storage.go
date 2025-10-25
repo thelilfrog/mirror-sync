@@ -233,7 +233,7 @@ func (r *Repository) List() ([]project.Project, error) {
 	}
 	defer rows.Close()
 
-	stmt, err := r.db.Prepare("SELECT name, schedule, source, destination WHERE uuid = ?")
+	stmt, err := r.db.Prepare("SELECT name, schedule, source, destination FROM Repositories WHERE uuid = ?")
 	if err != nil {
 		return nil, fmt.Errorf("invalid syntax: %w", err)
 	}

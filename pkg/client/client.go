@@ -59,6 +59,36 @@ func (c *Client) Apply(pr project.Project) error {
 	return nil
 }
 
+func (c *Client) List() ([]project.Project, error) {
+	url, err := url.JoinPath(c.url, "api", "v1", "projects", "all")
+	if err != nil {
+		return nil, fmt.Errorf("failed to make url: %s", err)
+	}
+
+	res, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send the request to the server: %s", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != 201 {
+		return nil, fmt.Errorf("failed to send the request to the server: %s: %s", res.Status, toError(res.Body))
+	}
+
+	var prs []project.Project
+	d := json.NewDecoder(res.Body)
+	if err := d.Decode(&prs); err != nil {
+		return nil, fmt.Errorf("failed to parse the server response, is the client you up-to-date? (reason: %s)", err)
+	}
+
+	for i, pr := range prs {
+		pr.ServerURL = c.url
+		prs[i] = pr
+	}
+
+	return prs, nil
+}
+
 func toError(body io.ReadCloser) error {
 	var msg SimpleError
 

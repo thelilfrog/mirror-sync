@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"mirror-sync/cmd/cli/commands/apply"
+	"mirror-sync/cmd/cli/commands/list"
 	"mirror-sync/cmd/cli/commands/version"
 	"os"
 
@@ -11,12 +13,20 @@ import (
 )
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintln(os.Stderr, "fatal:", r)
+		}
+	}()
+
 	subcommands.Register(subcommands.HelpCommand(), "help")
 	subcommands.Register(subcommands.FlagsCommand(), "help")
 	subcommands.Register(subcommands.CommandsCommand(), "help")
 	subcommands.Register(&version.VersionCmd{}, "help")
 
 	subcommands.Register(&apply.ApplyCmd{}, "projects")
+
+	subcommands.Register(&list.ListCmd{}, "management")
 
 	flag.Parse()
 	ctx := context.Background()
