@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/goccy/go-yaml"
+	"github.com/robfig/cron/v3"
 )
 
 type (
@@ -29,8 +30,8 @@ type (
 	}
 
 	GitStorage struct {
-		Source      string `yaml:"source"`
-		Destination string `yaml:"destination"`
+		Source string `yaml:"source"`
+		Mirror string `yaml:"mirror"`
 	}
 )
 
@@ -58,6 +59,10 @@ func LoadCurrent() (Project, error) {
 		return Project{}, fmt.Errorf("%w: %s", ErrParsing, err)
 	}
 
+	if err := checkConfig(mainFile); err != nil {
+		return Project{}, fmt.Errorf("failed to validate configuration: %w", err)
+	}
+
 	pr := Project{
 		Name:      filepath.Base(wd),
 		ServerURL: "http://localhost:8080",
@@ -83,10 +88,29 @@ func LoadCurrent() (Project, error) {
 		pr.Repositories = append(pr.Repositories, Repository{
 			Name:        fmt.Sprintf("%s-%s", pr.Name, strings.ToLower(repoName)),
 			Source:      repo.Storage.Source,
-			Destination: repo.Storage.Destination,
+			Destination: repo.Storage.Mirror,
 			Schedule:    repo.Schedule,
 		})
 	}
 
 	return pr, nil
+}
+
+func checkConfig(mf MainFile) error {
+	for _, r := range mf.Repositories {
+		if len(strings.TrimSpace(r.Storage.Source)) == 0 {
+			return fmt.Errorf("source is empty")
+		}
+		if len(strings.TrimSpace(r.Storage.Mirror)) == 0 {
+			return fmt.Errorf("mirror is empty")
+		}
+		if len(strings.TrimSpace(r.Schedule)) == 0 {
+			return fmt.Errorf("schedule is empty")
+		}
+		if _, err := cron.ParseStandard(r.Schedule); err != nil {
+			return fmt.Errorf("failed to validate schedule: %w", err)
+		}
+	}
+
+	return nil
 }

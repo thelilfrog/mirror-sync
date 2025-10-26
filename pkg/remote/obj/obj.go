@@ -15,9 +15,9 @@ type (
 		Message string `json:"message"`
 	}
 
-	HTTPObject struct {
+	HTTPObject[T any] struct {
 		HTTPCore
-		Data any `json:"data"`
+		Data T `json:"data"`
 	}
 
 	SystemInformation struct {

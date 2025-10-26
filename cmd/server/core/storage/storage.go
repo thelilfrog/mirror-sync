@@ -227,13 +227,13 @@ func (r *Repository) Update(pr project.Project) error {
 func (r *Repository) List() ([]project.Project, error) {
 	var prs []project.Project
 
-	rows, err := r.db.Query("SELECT uuid, name WHERE Projects")
+	rows, err := r.db.Query("SELECT uuid, name FROM Projects")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get the list of projects: %w", err)
 	}
 	defer rows.Close()
 
-	stmt, err := r.db.Prepare("SELECT name, schedule, source, destination FROM Repositories WHERE uuid = ?")
+	stmt, err := r.db.Prepare("SELECT name, schedule, source, destination FROM Repositories WHERE project = ?")
 	if err != nil {
 		return nil, fmt.Errorf("invalid syntax: %w", err)
 	}
@@ -244,18 +244,21 @@ func (r *Repository) List() ([]project.Project, error) {
 			return nil, fmt.Errorf("failed to scan project name: %w", err)
 		}
 
-		for rows.Next() {
+		repoRows, err := stmt.Query(prUUID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to query repositories for the project %s: %w", prUUID, err)
+		}
+
+		for repoRows.Next() {
 			var repo project.Repository
-			rows, err := stmt.Query(prUUID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get the list of projects: %w", err)
-			}
-			if err := rows.Scan(&repo.Name, &repo.Schedule, &repo.Source, &repo.Destination); err != nil {
+			if err := repoRows.Scan(&repo.Name, &repo.Schedule, &repo.Source, &repo.Destination); err != nil {
+				repoRows.Close()
 				return nil, fmt.Errorf("failed to scan repository entry: %w", err)
 			}
-
 			pr.Repositories = append(pr.Repositories, repo)
 		}
+
+		repoRows.Close()
 		prs = append(prs, pr)
 	}
 

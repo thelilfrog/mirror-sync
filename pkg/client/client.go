@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"mirror-sync/pkg/project"
+	"mirror-sync/pkg/remote/obj"
 	"net/http"
 	"net/url"
 )
@@ -71,15 +72,17 @@ func (c *Client) List() ([]project.Project, error) {
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode != 201 {
+	if res.StatusCode != 200 {
 		return nil, fmt.Errorf("failed to send the request to the server: %s: %s", res.Status, toError(res.Body))
 	}
 
-	var prs []project.Project
+	var payload obj.HTTPObject[[]project.Project]
 	d := json.NewDecoder(res.Body)
-	if err := d.Decode(&prs); err != nil {
-		return nil, fmt.Errorf("failed to parse the server response, is the client you up-to-date? (reason: %s)", err)
+	if err := d.Decode(&payload); err != nil {
+		return nil, fmt.Errorf("failed to parse the server response, is your client up-to-date? (reason: %s)", err)
 	}
+
+	prs := payload.Data
 
 	for i, pr := range prs {
 		pr.ServerURL = c.url

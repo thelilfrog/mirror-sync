@@ -87,7 +87,7 @@ func unauthorized(w http.ResponseWriter, r *http.Request) {
 }
 
 func ok(o interface{}, w http.ResponseWriter, r *http.Request) {
-	payload := obj.HTTPObject{
+	payload := obj.HTTPObject[any]{
 		HTTPCore: obj.HTTPCore{
 			Status:    http.StatusOK,
 			Path:      r.RequestURI,
