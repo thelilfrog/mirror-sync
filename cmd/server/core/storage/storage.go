@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"mirror-sync/pkg/project"
 
-	_ "github.com/glebarez/go-sqlite"
 	"github.com/google/uuid"
+	_ "github.com/ncruces/go-sqlite3/driver"
+	_ "github.com/ncruces/go-sqlite3/embed"
 )
 
 type (
@@ -18,7 +19,7 @@ type (
 
 func OpenDB(path string) (*Repository, error) {
 	// connect
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite3", "file:"+path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %s", err)
 	}

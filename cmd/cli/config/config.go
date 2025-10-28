@@ -46,7 +46,7 @@ func Load() ClientConfiguration {
 func Default() ClientConfiguration {
 	return ClientConfiguration{
 		Deamon: ClientDaemonConfiguration{
-			URL: "http://localhost:8080",
+			URL: "http://localhost:25697",
 		},
 	}
 }

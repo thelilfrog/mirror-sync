@@ -94,7 +94,7 @@ func decode(mainFile MainFile) (Project, error) {
 
 	pr := Project{
 		Name:      filepath.Base(wd),
-		ServerURL: "http://localhost:8080",
+		ServerURL: "http://localhost:25697",
 	}
 
 	if len(strings.TrimSpace(mainFile.ProjectName)) > 0 {
@@ -103,7 +103,7 @@ func decode(mainFile MainFile) (Project, error) {
 
 	if len(strings.TrimSpace(mainFile.Server.Hostname)) > 0 {
 		method := "https"
-		port := 8080
+		port := 25697
 		if mainFile.Server.Insecure {
 			method = "http"
 		}

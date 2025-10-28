@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log/slog"
 	"mirror-sync/cmd/server/api"
@@ -10,12 +9,25 @@ import (
 	"mirror-sync/pkg/constants"
 	"os"
 	"runtime"
+	"strconv"
 )
 
 func main() {
-	var dbPath string
-	flag.StringVar(&dbPath, "db-path", "/var/lib/mirror-sync/data.db", "path to the sqlite database")
-	flag.Parse()
+	dbPath := os.Getenv("MIRRORSYNC_DB_PATH")
+	if len(dbPath) == 0 {
+		dbPath = "/var/lib/mirror-sync/data.db"
+	}
+
+	p := os.Getenv("MIRRORSYNC_PORT")
+	if len(p) == 0 {
+		p = "25697"
+	}
+
+	port, err := strconv.Atoi(p)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: bad MIRRORSYNC_PORT value: %s", err)
+		os.Exit(1)
+	}
 
 	fmt.Printf("mirror-sync daemon -- v%s.%s.%s\n\n", constants.Version, runtime.GOOS, runtime.GOARCH)
 
@@ -47,9 +59,9 @@ func main() {
 	slog.Info("daemon scheduler is running")
 
 	// api
-	s := api.NewServer(data, scheduler, 8080)
+	s := api.NewServer(data, scheduler, port)
 
-	slog.Info("daemon listening to :8080")
+	slog.Info("daemon listening to :" + p)
 	if err := s.Server.ListenAndServe(); err != nil {
 		fmt.Fprintln(os.Stderr, "failed to start server:", err.Error())
 		os.Exit(1)
