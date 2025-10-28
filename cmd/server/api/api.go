@@ -11,20 +11,24 @@ import (
 	"net/http"
 	"runtime"
 
+	cronruntime "mirror-sync/cmd/server/core/runtime"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
 type (
 	HTTPServer struct {
-		Server *http.Server
-		data   *storage.Repository
+		Server    *http.Server
+		data      *storage.Repository
+		scheduler *cronruntime.Scheduler
 	}
 )
 
-func NewServer(data *storage.Repository, port int) *HTTPServer {
+func NewServer(data *storage.Repository, scheduler *cronruntime.Scheduler, port int) *HTTPServer {
 	s := &HTTPServer{
-		data: data,
+		data:      data,
+		scheduler: scheduler,
 	}
 	router := chi.NewRouter()
 	router.NotFound(func(writer http.ResponseWriter, request *http.Request) {
@@ -86,6 +90,13 @@ func (s *HTTPServer) ProjectPostHandler(w http.ResponseWriter, r *http.Request) 
 
 	if err := s.data.Save(pr); err != nil {
 		slog.Error("failed to save project to the database", "err", err)
+		internalServerError(err, w, r)
+		return
+	}
+
+	s.scheduler.Remove(pr)
+	if err := s.scheduler.Add(pr); err != nil {
+		slog.Error("failed to run project", "err", err)
 		internalServerError(err, w, r)
 		return
 	}

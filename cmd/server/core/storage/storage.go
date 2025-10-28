@@ -117,16 +117,47 @@ func (r *Repository) Create(pr project.Project) error {
 	}
 
 	// Create repositories entries
-	stmt, err = tx.Prepare("INSERT INTO Repositories (uuid, name, source, destination, schedule, project) VALUES (?, ?, ?, ?, ?, ?)")
+
+	for _, repo := range pr.Repositories {
+		if err := r.createRepository(tx, projectUUID, repo); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r Repository) createRepository(tx *sql.Tx, projectUuid string, repo project.Repository) error {
+	repoUUID := uuid.NewString()
+
+	stmt, err := tx.Prepare("INSERT INTO Repositories (uuid, name, source, destination, schedule, project) VALUES (?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		return fmt.Errorf("failed to create statement: %s", err)
 	}
 
-	for _, repo := range pr.Repositories {
-		repoUUID := uuid.NewString()
+	if _, err := stmt.Exec(repoUUID, repo.Name, repo.Source, repo.Destination, repo.Schedule, projectUuid); err != nil {
+		return fmt.Errorf("failed to execute sql query: %s", err)
+	}
 
-		if _, err := stmt.Exec(repoUUID, repo.Name, repo.Source, repo.Destination, repo.Schedule, projectUUID); err != nil {
-			return fmt.Errorf("failed to execute sql query: %s", err)
+	for ref, auth := range repo.Authentications {
+		if len(auth.Token) > 0 {
+			stmt, err := tx.Prepare("INSERT INTO Authentication (repository, ref, token) VALUES (?, ?, ?)")
+			if err != nil {
+				return fmt.Errorf("failed to create statement: %s", err)
+			}
+
+			if _, err := stmt.Exec(repoUUID, ref, auth.Token); err != nil {
+				return fmt.Errorf("failed to execute sql query: %s", err)
+			}
+		} else if auth.Basic != nil {
+			stmt, err := tx.Prepare("INSERT INTO Authentication (repository, ref, username, password) VALUES (?, ?, ?, ?)")
+			if err != nil {
+				return fmt.Errorf("failed to create statement: %s", err)
+			}
+
+			if _, err := stmt.Exec(repoUUID, ref, auth.Basic.Username, auth.Basic.Password); err != nil {
+				return fmt.Errorf("failed to execute sql query: %s", err)
+			}
 		}
 	}
 
@@ -185,11 +216,6 @@ func (r *Repository) Update(pr project.Project) error {
 		return fmt.Errorf("failed to get project uuid: %w", err)
 	}
 
-	stmt, err := tx.Prepare("UPDATE Repositories SET schedule = ?, source = ?, destination = ? WHERE uuid = ?")
-	if err != nil {
-		return fmt.Errorf("failed to create statement: %w", err)
-	}
-
 	// this loop does NOT remove orphan
 	for _, repo := range pr.Repositories {
 		// checks if the repo exists
@@ -200,24 +226,52 @@ func (r *Repository) Update(pr project.Project) error {
 
 		if exists {
 			// if it exists, just update it
-			uuid, err := r.RepositoryUUID(repo.Name)
-			if err != nil {
-				return fmt.Errorf("failed to get uuid from database: %w", err)
-			}
-
-			if _, err := stmt.Exec(repo.Schedule, repo.Source, repo.Destination, uuid); err != nil {
-				return fmt.Errorf("failed to update repository entry for %s::'%s'", uuid, repo.Name)
+			if err := r.updateRepository(tx, repo); err != nil {
+				return err
 			}
 		} else {
 			// if not, create a new uuid and create the entry
-			repoUUID := uuid.NewString()
-
-			if _, err := stmt.Exec(repoUUID, repo.Name, repo.Source, repo.Destination, repo.Schedule, projectUUID); err != nil {
-				return fmt.Errorf("failed to execute sql query: %s", err)
+			if err := r.createRepository(tx, projectUUID, repo); err != nil {
+				return err
 			}
 		}
-		if _, err := stmt.Exec(repo.Schedule, repo.Source, repo.Destination, repo.Name); err != nil {
-			return fmt.Errorf("failed to update repository entry for '%s'", repo.Name)
+	}
+
+	return nil
+}
+
+func (r *Repository) updateRepository(tx *sql.Tx, repo project.Repository) error {
+	uuid, err := r.RepositoryUUID(repo.Name)
+	if err != nil {
+		return fmt.Errorf("failed to get uuid from database: %w", err)
+	}
+
+	stmt, err := tx.Prepare("UPDATE Repositories SET schedule = ?, source = ?, destination = ? WHERE uuid = ?")
+	if err != nil {
+		return fmt.Errorf("failed to create statement: %w", err)
+	}
+
+	if _, err := stmt.Exec(repo.Schedule, repo.Source, repo.Destination, uuid); err != nil {
+		return fmt.Errorf("failed to update repository entry for %s::'%s'", uuid, repo.Name)
+	}
+
+	for ref, auth := range repo.Authentications {
+		if auth.Basic != nil {
+			stmt, err := tx.Prepare("UPDATE Authentication SET username = ?, password = ?, token = null WHERE repository = ? AND ref = ?")
+			if err != nil {
+				return fmt.Errorf("failed to create statement: %w", err)
+			}
+			if _, err := stmt.Exec(auth.Basic.Username, auth.Basic.Password, uuid, ref); err != nil {
+				return fmt.Errorf("failed to execut sql query: %s", err)
+			}
+		} else {
+			stmt, err := tx.Prepare("UPDATE Authentication SET username = null, password = null, token = ? WHERE repository = ? AND ref = ?")
+			if err != nil {
+				return fmt.Errorf("failed to create statement: %w", err)
+			}
+			if _, err := stmt.Exec(auth.Token, uuid, ref); err != nil {
+				return fmt.Errorf("failed to execute sql query: %s", err)
+			}
 		}
 	}
 
@@ -233,7 +287,12 @@ func (r *Repository) List() ([]project.Project, error) {
 	}
 	defer rows.Close()
 
-	stmt, err := r.db.Prepare("SELECT name, schedule, source, destination FROM Repositories WHERE project = ?")
+	stmt, err := r.db.Prepare("SELECT uuid, name, schedule, source, destination FROM Repositories WHERE project = ?")
+	if err != nil {
+		return nil, fmt.Errorf("invalid syntax: %w", err)
+	}
+
+	authStmt, err := r.db.Prepare("SELECT ref, username, password, token FROM Authentication WHERE repository = ?")
 	if err != nil {
 		return nil, fmt.Errorf("invalid syntax: %w", err)
 	}
@@ -250,11 +309,44 @@ func (r *Repository) List() ([]project.Project, error) {
 		}
 
 		for repoRows.Next() {
+			var uuid string
 			var repo project.Repository
-			if err := repoRows.Scan(&repo.Name, &repo.Schedule, &repo.Source, &repo.Destination); err != nil {
+			if err := repoRows.Scan(&uuid, &repo.Name, &repo.Schedule, &repo.Source, &repo.Destination); err != nil {
 				repoRows.Close()
 				return nil, fmt.Errorf("failed to scan repository entry: %w", err)
 			}
+
+			authRows, err := authStmt.Query(uuid)
+			if err != nil {
+				repoRows.Close()
+				return nil, fmt.Errorf("failed to query repositories for the project %s: %w", prUUID, err)
+			}
+
+			auth := make(map[string]project.AuthenticationSettings)
+			for authRows.Next() {
+				var ref string
+				var username, password, token *string
+				if err := authRows.Scan(&ref, &username, &password, &token); err != nil {
+					authRows.Close()
+					repoRows.Close()
+					return nil, fmt.Errorf("failed to scan authentication entry: %s", err)
+				}
+				if token != nil {
+					auth[ref] = project.AuthenticationSettings{
+						Token: *token,
+					}
+				} else if username != nil {
+					auth[ref] = project.AuthenticationSettings{
+						Basic: &project.BasicAuthenticationSettings{
+							Username: *username,
+							Password: *password,
+						},
+					}
+				}
+			}
+
+			authRows.Close()
+			repo.Authentications = auth
 			pr.Repositories = append(pr.Repositories, repo)
 		}
 

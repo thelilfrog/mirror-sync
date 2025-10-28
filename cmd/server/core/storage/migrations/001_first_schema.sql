@@ -15,6 +15,14 @@ CREATE TABLE Repositories (
 );
 CREATE INDEX Repositories_uuid_IDX ON Repositories (uuid);
 
+CREATE TABLE Authentication (
+	repository TEXT NOT NULL,
+	ref TEXT NOT NULL,
+	username TEXT,
+	"password" TEXT,
+	token TEXT
+);
+
 -- +goose Down
 DROP TABLE Projects;
 DROP TABLE Repositories;

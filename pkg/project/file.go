@@ -1,6 +1,7 @@
 package project
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -30,8 +31,23 @@ type (
 	}
 
 	GitStorage struct {
-		Source string `yaml:"source"`
-		Mirror string `yaml:"mirror"`
+		Source StorageSettings `yaml:"source"`
+		Mirror StorageSettings `yaml:"mirror"`
+	}
+
+	StorageSettings struct {
+		URL            string                   `yaml:"url"`
+		Authentication AuthenticationDescriptor `yaml:"authentication"`
+	}
+
+	AuthenticationDescriptor struct {
+		Basic BasicAuthenticationDescriptor `yaml:"basic"`
+		Token string                        `yaml:"token"`
+	}
+
+	BasicAuthenticationDescriptor struct {
+		Username string `yaml:"username"`
+		Password string `yaml:"password"`
 	}
 )
 
@@ -42,11 +58,6 @@ var (
 )
 
 func LoadCurrent() (Project, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return Project{}, fmt.Errorf("%w: cannot get current working directory path: %s", ErrOS, err)
-	}
-
 	f, err := os.OpenFile("./git-compose.yaml", os.O_RDONLY, 0)
 	if err != nil {
 		return Project{}, fmt.Errorf("%w: %s", ErrIO, err)
@@ -57,6 +68,24 @@ func LoadCurrent() (Project, error) {
 	d := yaml.NewDecoder(f)
 	if err := d.Decode(&mainFile); err != nil {
 		return Project{}, fmt.Errorf("%w: %s", ErrParsing, err)
+	}
+
+	return decode(mainFile)
+}
+
+func LoadBytes(b []byte) (Project, error) {
+	var mainFile MainFile
+	if err := json.Unmarshal(b, &mainFile); err != nil {
+		return Project{}, fmt.Errorf("%w: %s", ErrParsing, err)
+	}
+
+	return decode(mainFile)
+}
+
+func decode(mainFile MainFile) (Project, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return Project{}, fmt.Errorf("%w: cannot get current working directory path: %s", ErrOS, err)
 	}
 
 	if err := checkConfig(mainFile); err != nil {
@@ -85,24 +114,51 @@ func LoadCurrent() (Project, error) {
 	}
 
 	for repoName, repo := range mainFile.Repositories {
-		pr.Repositories = append(pr.Repositories, Repository{
+		r := Repository{
 			Name:        fmt.Sprintf("%s-%s", pr.Name, strings.ToLower(repoName)),
-			Source:      repo.Storage.Source,
-			Destination: repo.Storage.Mirror,
+			Source:      repo.Storage.Source.URL,
+			Destination: repo.Storage.Mirror.URL,
 			Schedule:    repo.Schedule,
-		})
+		}
+
+		r.Authentications = make(map[string]AuthenticationSettings)
+		setAuthentication(r.Authentications, "source", repo.Storage.Source.Authentication)
+		setAuthentication(r.Authentications, "mirror", repo.Storage.Mirror.Authentication)
+
+		pr.Repositories = append(pr.Repositories, r)
 	}
 
 	return pr, nil
 }
 
+func setAuthentication(m map[string]AuthenticationSettings, key string, auth AuthenticationDescriptor) {
+	if len(auth.Token) > 0 {
+		m[key] = AuthenticationSettings{
+			Token: auth.Token,
+		}
+	} else if len(auth.Basic.Username) > 0 {
+		m[key] = AuthenticationSettings{
+			Basic: &BasicAuthenticationSettings{
+				Username: auth.Basic.Username,
+				Password: auth.Basic.Password,
+			},
+		}
+	}
+}
+
 func checkConfig(mf MainFile) error {
 	for _, r := range mf.Repositories {
-		if len(strings.TrimSpace(r.Storage.Source)) == 0 {
+		if len(strings.TrimSpace(r.Storage.Source.URL)) == 0 {
 			return fmt.Errorf("source is empty")
 		}
-		if len(strings.TrimSpace(r.Storage.Mirror)) == 0 {
+		if err := checkAuthenticationConfig(r.Storage.Source); err != nil {
+			return err
+		}
+		if len(strings.TrimSpace(r.Storage.Mirror.URL)) == 0 {
 			return fmt.Errorf("mirror is empty")
+		}
+		if err := checkAuthenticationConfig(r.Storage.Mirror); err != nil {
+			return err
 		}
 		if len(strings.TrimSpace(r.Schedule)) == 0 {
 			return fmt.Errorf("schedule is empty")
@@ -112,5 +168,12 @@ func checkConfig(mf MainFile) error {
 		}
 	}
 
+	return nil
+}
+
+func checkAuthenticationConfig(ss StorageSettings) error {
+	if len(ss.Authentication.Token) > 0 && (len(ss.Authentication.Basic.Username) > 0 || len(ss.Authentication.Basic.Password) > 0) {
+		return fmt.Errorf("cannot use token and basic authentication in the same repository")
+	}
 	return nil
 }
