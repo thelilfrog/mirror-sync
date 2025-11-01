@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/goccy/go-yaml"
@@ -49,6 +48,11 @@ type (
 		Username string `yaml:"username"`
 		Password string `yaml:"password"`
 	}
+
+	DefaultValues struct {
+		DaemonURL   string
+		ProjectName string
+	}
 )
 
 var (
@@ -57,7 +61,7 @@ var (
 	ErrParsing error = errors.New("failed to parse file")
 )
 
-func LoadCurrent() (Project, error) {
+func LoadCurrent(defaultValues DefaultValues) (Project, error) {
 	f, err := os.OpenFile("./git-compose.yaml", os.O_RDONLY, 0)
 	if err != nil {
 		return Project{}, fmt.Errorf("%w: %s", ErrIO, err)
@@ -70,31 +74,26 @@ func LoadCurrent() (Project, error) {
 		return Project{}, fmt.Errorf("%w: %s", ErrParsing, err)
 	}
 
-	return decode(mainFile)
+	return decode(mainFile, defaultValues)
 }
 
-func LoadBytes(b []byte) (Project, error) {
+func LoadBytes(b []byte, defaultValues DefaultValues) (Project, error) {
 	var mainFile MainFile
 	if err := json.Unmarshal(b, &mainFile); err != nil {
 		return Project{}, fmt.Errorf("%w: %s", ErrParsing, err)
 	}
 
-	return decode(mainFile)
+	return decode(mainFile, defaultValues)
 }
 
-func decode(mainFile MainFile) (Project, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return Project{}, fmt.Errorf("%w: cannot get current working directory path: %s", ErrOS, err)
-	}
-
+func decode(mainFile MainFile, defaultValues DefaultValues) (Project, error) {
 	if err := checkConfig(mainFile); err != nil {
 		return Project{}, fmt.Errorf("failed to validate configuration: %w", err)
 	}
 
 	pr := Project{
-		Name:      filepath.Base(wd),
-		ServerURL: "http://localhost:25697",
+		Name:      defaultValues.ProjectName,
+		ServerURL: defaultValues.DaemonURL,
 	}
 
 	if len(strings.TrimSpace(mainFile.ProjectName)) > 0 {

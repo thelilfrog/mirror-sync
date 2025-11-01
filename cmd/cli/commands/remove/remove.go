@@ -1,4 +1,4 @@
-package apply
+package remove
 
 import (
 	"context"
@@ -14,23 +14,21 @@ import (
 )
 
 type (
-	ApplyCmd struct {
+	DownCmd struct {
 		projectName string
 	}
 )
 
-func (*ApplyCmd) Name() string     { return "apply" }
-func (*ApplyCmd) Synopsis() string { return "apply the current project settings" }
-func (*ApplyCmd) Usage() string {
-	return `Usage: mirror-sync apply
+func (*DownCmd) Name() string     { return "down" }
+func (*DownCmd) Synopsis() string { return "remove the current project schedule" }
+func (*DownCmd) Usage() string {
+	return `Usage: mirror-sync down
 
-apply the current project settings
-
-Options:
+remove the current project
 `
 }
 
-func (p *ApplyCmd) SetFlags(f *flag.FlagSet) {
+func (p *DownCmd) SetFlags(f *flag.FlagSet) {
 	wd, err := os.Getwd()
 	if err != nil {
 		panic(err)
@@ -38,7 +36,7 @@ func (p *ApplyCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&p.projectName, "project-name", filepath.Base(wd), "set the project name")
 }
 
-func (p *ApplyCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
+func (p *DownCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{}) subcommands.ExitStatus {
 	clientConfig := config.Load()
 
 	defaultValues := project.DefaultValues{
@@ -53,7 +51,7 @@ func (p *ApplyCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...interface{})
 	}
 
 	cli := client.New(projectConfig.ServerURL)
-	if err := cli.Apply(projectConfig); err != nil {
+	if err := cli.Remove(projectConfig); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		return subcommands.ExitFailure
 	}

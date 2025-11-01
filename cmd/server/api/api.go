@@ -37,6 +37,7 @@ func NewServer(data *storage.Repository, scheduler *cronruntime.Scheduler, port 
 	router.MethodNotAllowed(func(writer http.ResponseWriter, request *http.Request) {
 		methodNotAllowed(writer, request)
 	})
+	chi.RegisterMethod("EXECUTE")
 	router.Use(middleware.Logger)
 	router.Use(recoverMiddleware)
 	router.Use(middleware.GetHead)
@@ -46,11 +47,12 @@ func NewServer(data *storage.Repository, scheduler *cronruntime.Scheduler, port 
 		routerAPI.Route("/v1", func(r chi.Router) {
 			// Get information about the server
 			r.Get("/version", s.Information)
+			r.MethodFunc("EXECUTE", "/run", s.RunProjectHandler)
 			r.Route("/projects", func(r chi.Router) {
-				r.Get("/all", s.ProjectsHandler)
-				r.Get("/{name}", func(w http.ResponseWriter, r *http.Request) {})
-				r.Post("/{name}", s.ProjectPostHandler)
-				r.Delete("/{name}", func(w http.ResponseWriter, r *http.Request) {})
+				r.Get("/all", s.ProjectsGetHandler)
+				r.Get("/", func(w http.ResponseWriter, r *http.Request) {})
+				r.Post("/", s.ProjectPostHandler)
+				r.Delete("/", s.ProjectDeleteHandler)
 			})
 		})
 	})
@@ -73,13 +75,6 @@ func (s *HTTPServer) Information(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *HTTPServer) ProjectPostHandler(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-
-	if len(name) == 0 {
-		badRequest("project name cannot be empty", w, r)
-		return
-	}
-
 	var pr project.Project
 	d := json.NewDecoder(r.Body)
 	if err := d.Decode(&pr); err != nil {
@@ -104,7 +99,26 @@ func (s *HTTPServer) ProjectPostHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(201)
 }
 
-func (s *HTTPServer) ProjectsHandler(w http.ResponseWriter, r *http.Request) {
+func (s *HTTPServer) ProjectDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	var pr project.Project
+	d := json.NewDecoder(r.Body)
+	if err := d.Decode(&pr); err != nil {
+		slog.Error("failed to parse project description", "err", err)
+		internalServerError(err, w, r)
+		return
+	}
+
+	s.scheduler.Remove(pr)
+	if err := s.data.Remove(pr); err != nil {
+		slog.Error("failed to remove project", "err", err, "uuid", pr.UUID)
+		internalServerError(err, w, r)
+		return
+	}
+
+	w.WriteHeader(204)
+}
+
+func (s *HTTPServer) ProjectsGetHandler(w http.ResponseWriter, r *http.Request) {
 	prs, err := s.data.List()
 	if err != nil {
 		slog.Error("failed to fetch all the projects from the database", "err", err)
@@ -113,4 +127,22 @@ func (s *HTTPServer) ProjectsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ok(prs, w, r)
+}
+
+func (s *HTTPServer) RunProjectHandler(w http.ResponseWriter, r *http.Request) {
+	var pr project.Project
+	d := json.NewDecoder(r.Body)
+	if err := d.Decode(&pr); err != nil {
+		slog.Error("failed to parse project description", "err", err)
+		internalServerError(err, w, r)
+		return
+	}
+
+	if err := s.scheduler.RunOnce(pr); err != nil {
+		slog.Error("failed to run the project", "err", err)
+		internalServerError(err, w, r)
+		return
+	}
+
+	ok("ok", w, r)
 }

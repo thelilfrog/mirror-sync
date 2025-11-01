@@ -279,6 +279,43 @@ func (r *Repository) updateRepository(tx *sql.Tx, repo project.Repository) error
 	return nil
 }
 
+func (r *Repository) Remove(pr project.Project) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to create transaction: %s", err)
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+			return
+		}
+		tx.Commit()
+	}()
+
+	uuid, err := r.ProjectUUID(pr.Name)
+
+	repos, err := r.listRepositories(uuid)
+	if err != nil {
+		return err
+	}
+
+	for _, repo := range repos {
+		if _, err := tx.Exec("DELETE FROM Authentication WHERE repository = ?", repo.UUID); err != nil {
+			return fmt.Errorf("failed to delete the authentication entries from the database: %s", err)
+		}
+	}
+
+	if _, err := tx.Exec("DELETE FROM Repositories WHERE project = ?", uuid); err != nil {
+		return fmt.Errorf("failed to delete the repositories from the database: %s", err)
+	}
+
+	if _, err := tx.Exec("DELETE FROM Projects WHERE uuid = ?", uuid); err != nil {
+		return fmt.Errorf("failed to delete the project from the database: %s", err)
+	}
+
+	return nil
+}
+
 func (r *Repository) List() ([]project.Project, error) {
 	var prs []project.Project
 
@@ -288,72 +325,88 @@ func (r *Repository) List() ([]project.Project, error) {
 	}
 	defer rows.Close()
 
+	for rows.Next() {
+		var pr project.Project
+		if err := rows.Scan(&pr.UUID, &pr.Name); err != nil {
+			return nil, fmt.Errorf("failed to scan project name: %w", err)
+		}
+
+		repos, err := r.listRepositories(pr.UUID)
+		if err != nil {
+			return nil, err
+		}
+
+		pr.Repositories = repos
+
+		prs = append(prs, pr)
+	}
+
+	return prs, nil
+}
+
+func (r *Repository) listRepositories(projectUUID string) ([]project.Repository, error) {
 	stmt, err := r.db.Prepare("SELECT uuid, name, schedule, source, destination FROM Repositories WHERE project = ?")
 	if err != nil {
 		return nil, fmt.Errorf("invalid syntax: %w", err)
 	}
 
-	authStmt, err := r.db.Prepare("SELECT ref, username, password, token FROM Authentication WHERE repository = ?")
+	rows, err := stmt.Query(projectUUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query repositories for the project %s: %w", projectUUID, err)
+	}
+	defer rows.Close()
+
+	var repositories []project.Repository
+	for rows.Next() {
+		var repo project.Repository
+		if err := rows.Scan(&repo.UUID, &repo.Name, &repo.Schedule, &repo.Source, &repo.Destination); err != nil {
+			return nil, fmt.Errorf("failed to scan repository entry: %w", err)
+		}
+
+		auth, err := r.listAuthentications(repo.UUID)
+		if err != nil {
+			return nil, err
+		}
+		repo.Authentications = auth
+
+		repositories = append(repositories, repo)
+	}
+
+	return repositories, nil
+}
+
+func (r *Repository) listAuthentications(repositoryUUID string) (map[string]project.AuthenticationSettings, error) {
+	stmt, err := r.db.Prepare("SELECT ref, username, password, token FROM Authentication WHERE repository = ?")
 	if err != nil {
 		return nil, fmt.Errorf("invalid syntax: %w", err)
 	}
+
+	rows, err := stmt.Query(repositoryUUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query repositories for the project %s: %w", repositoryUUID, err)
+	}
+	defer rows.Close()
+
+	res := make(map[string]project.AuthenticationSettings)
 	for rows.Next() {
-		var pr project.Project
-		var prUUID string
-		if err := rows.Scan(&prUUID, &pr.Name); err != nil {
-			return nil, fmt.Errorf("failed to scan project name: %w", err)
+		var ref string
+		var username, password, token *string
+		if err := rows.Scan(&ref, &username, &password, &token); err != nil {
+			return nil, fmt.Errorf("failed to scan authentication entry: %s", err)
 		}
-
-		repoRows, err := stmt.Query(prUUID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to query repositories for the project %s: %w", prUUID, err)
+		if token != nil {
+			res[ref] = project.AuthenticationSettings{
+				Token: *token,
+			}
+		} else if username != nil {
+			res[ref] = project.AuthenticationSettings{
+				Basic: &project.BasicAuthenticationSettings{
+					Username: *username,
+					Password: *password,
+				},
+			}
 		}
-
-		for repoRows.Next() {
-			var uuid string
-			var repo project.Repository
-			if err := repoRows.Scan(&uuid, &repo.Name, &repo.Schedule, &repo.Source, &repo.Destination); err != nil {
-				repoRows.Close()
-				return nil, fmt.Errorf("failed to scan repository entry: %w", err)
-			}
-
-			authRows, err := authStmt.Query(uuid)
-			if err != nil {
-				repoRows.Close()
-				return nil, fmt.Errorf("failed to query repositories for the project %s: %w", prUUID, err)
-			}
-
-			auth := make(map[string]project.AuthenticationSettings)
-			for authRows.Next() {
-				var ref string
-				var username, password, token *string
-				if err := authRows.Scan(&ref, &username, &password, &token); err != nil {
-					authRows.Close()
-					repoRows.Close()
-					return nil, fmt.Errorf("failed to scan authentication entry: %s", err)
-				}
-				if token != nil {
-					auth[ref] = project.AuthenticationSettings{
-						Token: *token,
-					}
-				} else if username != nil {
-					auth[ref] = project.AuthenticationSettings{
-						Basic: &project.BasicAuthenticationSettings{
-							Username: *username,
-							Password: *password,
-						},
-					}
-				}
-			}
-
-			authRows.Close()
-			repo.Authentications = auth
-			pr.Repositories = append(pr.Repositories, repo)
-		}
-
-		repoRows.Close()
-		prs = append(prs, pr)
 	}
 
-	return prs, nil
+	return res, nil
 }

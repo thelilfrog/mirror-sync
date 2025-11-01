@@ -2,12 +2,14 @@ package project
 
 type (
 	Project struct {
+		UUID         string       `json:"uuid"`
 		Name         string       `json:"name"`
 		Repositories []Repository `json:"repositories"`
 		ServerURL    string       `json:"-"`
 	}
 
 	Repository struct {
+		UUID            string                            `json:"uuid"`
 		Name            string                            `json:"name"`
 		Schedule        string                            `json:"schedule"`
 		Source          string                            `json:"source"`

@@ -34,26 +34,10 @@ func New(prs []project.Project) (*Scheduler, error) {
 func (s *Scheduler) Add(pr project.Project) error {
 	s.ids[pr.Name] = make(map[string]cron.EntryID)
 	for _, repo := range pr.Repositories {
-		var srcAuth git.Authentication = git.NoAuthentication{}
-		var dstAuth git.Authentication = git.NoAuthentication{}
-		if v, ok := repo.Authentications["source"]; ok {
-			if len(v.Token) > 0 {
-				srcAuth = git.NewTokenAuthentication(v.Token)
-			} else if v.Basic != nil {
-				srcAuth = git.NewBasicAuthentication(v.Basic.Username, v.Basic.Password)
-			}
-		}
-		if v, ok := repo.Authentications["mirror"]; ok {
-			if len(v.Token) > 0 {
-				dstAuth = git.NewTokenAuthentication(v.Token)
-			} else if v.Basic != nil {
-				dstAuth = git.NewBasicAuthentication(v.Basic.Username, v.Basic.Password)
-			}
-		}
-		r := git.NewRepository(repo.Source, repo.Destination, srcAuth, dstAuth)
+		gr := s.prepare(repo)
 		id, err := s.cr.AddFunc(repo.Schedule, func() {
 			slog.Info(fmt.Sprintf("[%s] starting sync...", repo.Name))
-			if err := git.Sync(r); err != nil {
+			if err := git.Sync(gr); err != nil {
 				slog.Error(fmt.Sprintf("[%s] failed to sync repository: %s", repo.Name, err))
 				return
 			}
@@ -78,6 +62,39 @@ func (s *Scheduler) Remove(pr project.Project) {
 		}
 	}
 	delete(s.ids, pr.Name)
+}
+
+func (s *Scheduler) RunOnce(pr project.Project) error {
+	for _, repo := range pr.Repositories {
+		gr := s.prepare(repo)
+		slog.Info(fmt.Sprintf("[%s] starting sync...", repo.Name))
+		if err := git.Sync(gr); err != nil {
+			slog.Error(fmt.Sprintf("[%s] failed to sync repository: %s", repo.Name, err))
+			continue
+		}
+		slog.Info(fmt.Sprintf("[%s] synced", repo.Name))
+	}
+	return nil
+}
+
+func (s *Scheduler) prepare(repo project.Repository) git.Repository {
+	var srcAuth git.Authentication = git.NoAuthentication{}
+	var dstAuth git.Authentication = git.NoAuthentication{}
+	if v, ok := repo.Authentications["source"]; ok {
+		if len(v.Token) > 0 {
+			srcAuth = git.NewTokenAuthentication(v.Token)
+		} else if v.Basic != nil {
+			srcAuth = git.NewBasicAuthentication(v.Basic.Username, v.Basic.Password)
+		}
+	}
+	if v, ok := repo.Authentications["mirror"]; ok {
+		if len(v.Token) > 0 {
+			dstAuth = git.NewTokenAuthentication(v.Token)
+		} else if v.Basic != nil {
+			dstAuth = git.NewBasicAuthentication(v.Basic.Username, v.Basic.Password)
+		}
+	}
+	return git.NewRepository(repo.Source, repo.Destination, srcAuth, dstAuth)
 }
 
 // Run the cron scheduler, or no-op if already running.

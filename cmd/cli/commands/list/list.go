@@ -56,6 +56,6 @@ func print(pr project.Project) {
 	fmt.Println("------------------")
 
 	for _, repo := range pr.Repositories {
-		fmt.Printf("%-20s | %s -> %s | %s\n", repo.Name, repo.Source, repo.Destination, repo.Schedule)
+		fmt.Printf("%s | %-20s | %s -> %s | %s\n", repo.UUID, repo.Name, repo.Source, repo.Destination, repo.Schedule)
 	}
 }

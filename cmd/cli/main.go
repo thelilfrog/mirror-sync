@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"mirror-sync/cmd/cli/commands/apply"
 	"mirror-sync/cmd/cli/commands/list"
+	"mirror-sync/cmd/cli/commands/remove"
+	"mirror-sync/cmd/cli/commands/run"
 	"mirror-sync/cmd/cli/commands/version"
 	"os"
 
@@ -25,6 +27,8 @@ func main() {
 	subcommands.Register(&version.VersionCmd{}, "help")
 
 	subcommands.Register(&apply.ApplyCmd{}, "projects")
+	subcommands.Register(&run.RunCmd{}, "projects")
+	subcommands.Register(&remove.DownCmd{}, "projects")
 
 	subcommands.Register(&list.ListCmd{}, "management")
 
