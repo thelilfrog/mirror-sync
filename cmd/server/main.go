@@ -1,9 +1,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log/slog"
 	"mirror-sync/cmd/server/api"
+	"mirror-sync/cmd/server/core/config"
 	cronruntime "mirror-sync/cmd/server/core/runtime"
 	"mirror-sync/cmd/server/core/storage"
 	"mirror-sync/pkg/constants"
@@ -13,14 +15,29 @@ import (
 )
 
 func main() {
+	ecpath := os.Getenv("MIRRORSYNC_CONFIG_PATH")
+	if len(ecpath) == 0 {
+		ecpath = "/etc/mirror-sync"
+	}
+
+	var configPath string
+	flag.StringVar(&configPath, "config", ecpath, "path to the configuration folder")
+	flag.Parse()
+
+	c, err := config.Load(configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "failed to start server:", err.Error())
+		os.Exit(1)
+	}
+
 	dbPath := os.Getenv("MIRRORSYNC_DB_PATH")
 	if len(dbPath) == 0 {
-		dbPath = "/var/lib/mirror-sync/data.db"
+		dbPath = c.Database.Path
 	}
 
 	p := os.Getenv("MIRRORSYNC_PORT")
 	if len(p) == 0 {
-		p = "25697"
+		p = fmt.Sprintf("%d", c.Server.Port)
 	}
 
 	port, err := strconv.Atoi(p)
@@ -59,9 +76,9 @@ func main() {
 	slog.Info("daemon scheduler is running")
 
 	// api
-	s := api.NewServer(data, scheduler, port)
+	s := api.NewServer(data, scheduler, c.Server.Address, port)
 
-	slog.Info("daemon listening to :" + p)
+	slog.Info(fmt.Sprintf("daemon listening to %s:%s", c.Server.Address, p))
 	if err := s.Server.ListenAndServe(); err != nil {
 		fmt.Fprintln(os.Stderr, "failed to start server:", err.Error())
 		os.Exit(1)

@@ -25,7 +25,7 @@ type (
 	}
 )
 
-func NewServer(data *storage.Repository, scheduler *cronruntime.Scheduler, port int) *HTTPServer {
+func NewServer(data *storage.Repository, scheduler *cronruntime.Scheduler, addr string, port int) *HTTPServer {
 	s := &HTTPServer{
 		data:      data,
 		scheduler: scheduler,
@@ -57,7 +57,7 @@ func NewServer(data *storage.Repository, scheduler *cronruntime.Scheduler, port 
 		})
 	})
 	s.Server = &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
+		Addr:    fmt.Sprintf("%s:%d", addr, port),
 		Handler: router,
 	}
 	return s

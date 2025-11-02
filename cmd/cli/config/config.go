@@ -40,7 +40,7 @@ func Load() ClientConfiguration {
 		panic("failed to read the configuration file: " + err.Error())
 	}
 
-	return c
+	return fillDefault(c)
 }
 
 func Default() ClientConfiguration {
@@ -49,4 +49,12 @@ func Default() ClientConfiguration {
 			URL: "http://localhost:25697",
 		},
 	}
+}
+
+func fillDefault(c ClientConfiguration) ClientConfiguration {
+	if len(c.Deamon.URL) == 0 {
+		c.Deamon.URL = Default().Deamon.URL
+	}
+
+	return c
 }
